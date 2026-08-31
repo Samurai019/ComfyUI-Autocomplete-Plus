@@ -6,11 +6,13 @@ import {
     getCurrentTagRange,
     getScrollbarWidth,
     getViewportMargin,
+    isContainsLetterOrNumber,
     isLongText,
     isValidTag,
     normalizeTagToInsert,
     normalizeTagToSearch,
-    openTagWikiUrl
+    openTagWikiUrl,
+    parseTagWeight
 } from './utils.js';
 
 // --- RelatedTags Logic ---
@@ -264,6 +266,32 @@ class RelatedTagsUI {
 
         this.header.appendChild(this.headerControls);
 
+        // Create weight adjustment controls for the header tag
+        this.weightControls = document.createElement('span');
+        this.weightControls.className = 'related-tags-weight-controls';
+        this.weightControls.style.display = 'none';
+
+        this.weightUpBtn = document.createElement('button');
+        this.weightUpBtn.className = 'related-tags-weight-btn';
+        this.weightUpBtn.textContent = '▲';
+
+        this.weightDownBtn = document.createElement('button');
+        this.weightDownBtn.className = 'related-tags-weight-btn';
+        this.weightDownBtn.textContent = '▼';
+
+        this.weightResetBtn = document.createElement('button');
+        this.weightResetBtn.className = 'related-tags-weight-btn';
+        this.weightResetBtn.textContent = '↺';
+
+        // Use mousedown so the textarea keeps focus (no blur side effects)
+        this.weightUpBtn.addEventListener('mousedown', (e) => this.#updateTagWeight(1, e));
+        this.weightDownBtn.addEventListener('mousedown', (e) => this.#updateTagWeight(-1, e));
+        this.weightResetBtn.addEventListener('mousedown', (e) => this.#resetTagWeight(e));
+
+        this.weightControls.appendChild(this.weightUpBtn);
+        this.weightControls.appendChild(this.weightDownBtn);
+        this.weightControls.appendChild(this.weightResetBtn);
+
         this.root.appendChild(this.header);
 
         // Create a tbody for the tags
@@ -277,6 +305,9 @@ class RelatedTagsUI {
         this.target = null;
         this.selectedIndex = -1;
         this.relatedTags = [];
+
+        // Suppress panel hide on input event triggered by programmatic tag weight edits
+        this.suppressInputHide = false;
 
         // Timer ID for auto-refresh
         this.autoRefreshTimerId = null;
@@ -456,23 +487,30 @@ class RelatedTagsUI {
         const categoryText = TagCategory[tagData.source][tagData.category] || "unknown";
         const aliasText = tagData.alias.join(', ');
 
+        // Find the raw tag segment in the textarea the weight controls act on
+        const weightRange = this.#findWeightTargetRange();
+        const { tag: baseTag, weight } = weightRange ? parseTagWeight(weightRange.raw) : { tag: null, weight: 1.0 };
+        // Display the weighted form in the header when the tag currently has a weight
+        const displayTag = weight !== 1.0 ? weightRange.raw.trim() : tagData.tag;
+
         // Update header text with current tag
         this.headerText.innerHTML = ''; // Clear previous content
         this.headerText.textContent = 'Tags related to: ';
 
         const tagName = document.createElement('span');
         tagName.classList.add('related-tags-header-tag-name', tagData.source);
-        tagName.title = `Count: ${tagData.count}\nCategory: ${categoryText}\nAlias: ${aliasText}`;
+        tagName.title = `Count: ${tagData.count}\nCategory: ${categoryText}\nAlias: ${aliasText}` +
+            (weight !== 1.0 ? `\nWeight: ${weight.toFixed(1)}` : '');
         tagName.dataset.tagCategory = categoryText;
         tagName.dataset.tagSource = tagData.source;
         tagName.dataset.tagName = tagData.tag;
         if (tagData.source && ['left', 'right'].includes(settingValues.tagSourceIconPosition)) {
             const tagSourceIconHtml = `<svg class="autocomplete-plus-tag-icon-svg"><use xlink:href="#autocomplete-plus-icon-${tagData.source}"></use></svg>`;
             tagName.innerHTML = settingValues.tagSourceIconPosition == 'left'
-                ? `${tagSourceIconHtml} ${tagData.tag}`
-                : `${tagData.tag} ${tagSourceIconHtml}`;
+                ? `${tagSourceIconHtml} ${displayTag}`
+                : `${displayTag} ${tagSourceIconHtml}`;
         } else {
-            tagName.textContent += tagData.tag;
+            tagName.textContent += displayTag;
         }
 
         if (!tagData.hasWikiPage) {
@@ -498,6 +536,150 @@ class RelatedTagsUI {
         this.toggleLayoutBtn.innerHTML = settingValues.relatedTagsDisplayPosition === 'vertical'
             ? '↔️' // Click to change display horizontally
             : '↕️'; // Click to change display vertically
+
+        // Update weight controls state and attach them to the header tag line
+        this.#updateWeightControls(weightRange, baseTag, weight);
+        this.headerText.appendChild(this.weightControls);
+    }
+
+    /**
+     * Updates the header weight controls (visibility, disabled state, tooltips).
+     * @param {{ start: number, end: number, raw: string }|null} weightRange The raw tag segment the controls act on
+     * @param {string} baseTag The base tag name without weight notation
+     * @param {number} weight The current weight of the tag
+     */
+    #updateWeightControls(weightRange, baseTag, weight) {
+        // Hide the controls if the tag cannot be found or weights don't apply (e.g. symbol-only tags)
+        if (!weightRange || !isContainsLetterOrNumber(baseTag)) {
+            this.weightControls.style.display = 'none';
+            return;
+        }
+
+        this.weightControls.style.display = '';
+        this.weightUpBtn.disabled = weight >= 2.0;
+        this.weightDownBtn.disabled = weight <= 0.1;
+        this.weightResetBtn.disabled = weight <= 1.0;
+        this.weightUpBtn.title = `Increase weight by 0.1 (current: ${weight.toFixed(1)})`;
+        this.weightDownBtn.title = `Decrease weight by 0.1 (current: ${weight.toFixed(1)})`;
+        this.weightResetBtn.title = `Reset weight to 1.0 (current: ${weight.toFixed(1)})`;
+    }
+
+    /**
+     * Finds the raw tag segment (may include parentheses and weight) the header weight controls act on.
+     * Prefers the tag under the cursor when it is the panel's current tag; otherwise (pinned mode)
+     * falls back to the first occurrence of the current tag in the textarea.
+     * @returns {{ start: number, end: number, raw: string }|null}
+     */
+    #findWeightTargetRange() {
+        const inputElement = this.target;
+        if (!inputElement || !this.currentTag) return null;
+
+        const text = inputElement.value;
+        const cursorPos = inputElement.selectionStart ?? 0;
+        const tagPositions = findAllTagPositions(text);
+
+        // Compare tags in the same normalized space as currentTag.
+        // Use parseTagWeight (parentheses first) because normalizeTagToSearch alone
+        // does not strip a weight that is inside parentheses, e.g. "(1girl:1.1)".
+        const matchesCurrentTag = (pos) => normalizeTagToSearch(parseTagWeight(pos.tag).tag) === this.currentTag;
+
+        // The tag under the cursor (if it is the panel's current tag)
+        const underCursor = tagPositions.find(
+            pos => cursorPos >= pos.start && cursorPos <= pos.end && matchesCurrentTag(pos)
+        );
+        if (underCursor) {
+            return { start: underCursor.start, end: underCursor.end, raw: underCursor.tag };
+        }
+
+        // Pinned mode: the cursor may have moved elsewhere, use the first occurrence of the current tag
+        if (this.isPinned) {
+            const firstOccurrence = tagPositions.find(matchesCurrentTag);
+            if (firstOccurrence) {
+                return { start: firstOccurrence.start, end: firstOccurrence.end, raw: firstOccurrence.tag };
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Increases or decreases the weight of the header tag in the target textarea.
+     * Replaces the tag's raw text with the new weighted form, e.g. "1girl" -> "(1girl:1.1)".
+     * @param {number} direction 1 to increase, -1 to decrease
+     * @param {MouseEvent} event The mousedown event from a weight control button
+     */
+    #updateTagWeight(direction, event) {
+        // Keep focus in the textarea so blur-driven side effects (auto-format, panel hide) don't fire
+        event.preventDefault();
+        event.stopPropagation();
+
+        const inputElement = this.target;
+        const weightRange = this.#findWeightTargetRange();
+        if (!inputElement || !weightRange) return;
+
+        const { tag: baseTag, weight: currentWeight } = parseTagWeight(weightRange.raw);
+        if (!isContainsLetterOrNumber(baseTag)) return;
+
+        const newWeight = Math.round((currentWeight + direction * 0.1) * 10) / 10;
+        if (newWeight < 0.1 || newWeight > 2.0) return;
+
+        // Plain tag when the weight is 1.0, otherwise weight notation with parentheses
+        const newTagText = newWeight === 1.0 ? baseTag : `(${baseTag}:${newWeight.toFixed(1)})`;
+
+        this.#writeTagToTextArea(inputElement, weightRange, newTagText);
+        this.#updateHeader();
+    }
+
+    /**
+     * Removes the weight from the header tag in the target textarea,
+     * restoring the plain tag, e.g. "(1girl:1.1)" -> "1girl".
+     * @param {MouseEvent} event The mousedown event from the reset weight button
+     */
+    #resetTagWeight(event) {
+        // Keep focus in the textarea so blur-driven side effects (auto-format, panel hide) don't fire
+        event.preventDefault();
+        event.stopPropagation();
+
+        const inputElement = this.target;
+        const weightRange = this.#findWeightTargetRange();
+        if (!inputElement || !weightRange) return;
+
+        const { tag: baseTag, weight: currentWeight } = parseTagWeight(weightRange.raw);
+        if (!isContainsLetterOrNumber(baseTag) || currentWeight === 1.0) return;
+
+        this.#writeTagToTextArea(inputElement, weightRange, baseTag);
+        this.#updateHeader();
+    }
+
+    /**
+     * Replaces the given tag range in the textarea with new text.
+     * Uses document.execCommand for undo support and triggers an input event on fallback.
+     * @param {HTMLTextAreaElement} inputElement The target textarea
+     * @param {{ start: number, end: number }} weightRange The range of the tag to replace
+     * @param {string} newTagText The replacement text
+     */
+    #writeTagToTextArea(inputElement, weightRange, newTagText) {
+        const text = inputElement.value;
+        inputElement.focus();
+        inputElement.setSelectionRange(weightRange.start, weightRange.end);
+
+        // Prevent the panel from being hidden by the input event this edit triggers
+        this.suppressInputHide = true;
+        try {
+            const replaced = document.execCommand('insertText', false, newTagText);
+
+            if (!replaced) {
+                // Fallback for browsers where execCommand might not be supported
+                console.warn('[Autocomplete-Plus] execCommand("insertText") failed. Falling back to direct value manipulation (Undo might not work).');
+                inputElement.value = text.substring(0, weightRange.start) + newTagText + text.substring(weightRange.end);
+                inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            // Select the whole updated tag so the change is visible
+            inputElement.setSelectionRange(weightRange.start, weightRange.start + newTagText.length);
+        } finally {
+            this.suppressInputHide = false;
+        }
     }
 
     /**
@@ -767,7 +949,11 @@ export class RelatedTagsEventHandler {
      */
     handleInput(event) {
         if (settingValues.enableRelatedTags) {
-            if (this.relatedTagsUI.isVisible() && !this.relatedTagsUI.isPinned) {
+            if (
+                this.relatedTagsUI.isVisible() &&
+                !this.relatedTagsUI.isPinned &&
+                !this.relatedTagsUI.suppressInputHide
+            ) {
                 this.relatedTagsUI.hide();
             }
         }

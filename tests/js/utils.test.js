@@ -5,7 +5,8 @@ import {
     normalizeTagToInsert,
     getCurrentTagRange,
     findAllTagPositions,
-    addWeightToLora
+    addWeightToLora,
+    parseTagWeight
 } from '../../web/js/utils.js';
 
 // filepath: web/js/utils.test.js
@@ -537,5 +538,58 @@ describe('addWeightToModel', () => {
         expect(addWeightToLora('Embedding:character_emb')).toBe('Embedding:character_emb');
         expect(addWeightToLora('EmBeDdInG:style_emb')).toBe('EmBeDdInG:style_emb');
         expect(addWeightToLora('EMBEDDING:my_embedding:0.9')).toBe('EMBEDDING:my_embedding:0.9');
+    });
+});
+
+
+describe('parseTagWeight', () => {
+    test('should return weight 1.0 for a plain tag', () => {
+        expect(parseTagWeight('1girl')).toEqual({ tag: '1girl', weight: 1.0 });
+        expect(parseTagWeight('long_hair')).toEqual({ tag: 'long_hair', weight: 1.0 });
+        expect(parseTagWeight('long hair')).toEqual({ tag: 'long hair', weight: 1.0 });
+    });
+
+    test('should parse weight without parentheses', () => {
+        expect(parseTagWeight('1girl:1.1')).toEqual({ tag: '1girl', weight: 1.1 });
+        expect(parseTagWeight('smile:0.9')).toEqual({ tag: 'smile', weight: 0.9 });
+        expect(parseTagWeight('standing:1.0')).toEqual({ tag: 'standing', weight: 1.0 });
+    });
+
+    test('should parse weight with parentheses', () => {
+        expect(parseTagWeight('(1girl:1.1)')).toEqual({ tag: '1girl', weight: 1.1 });
+        expect(parseTagWeight('(long hair:1.5)')).toEqual({ tag: 'long hair', weight: 1.5 });
+        expect(parseTagWeight('(smile:0.1)')).toEqual({ tag: 'smile', weight: 0.1 });
+    });
+
+    test('should strip emphasis parentheses without weight notation', () => {
+        expect(parseTagWeight('(1girl)')).toEqual({ tag: '1girl', weight: 1.0 });
+        expect(parseTagWeight('((1girl))')).toEqual({ tag: '1girl', weight: 1.0 });
+        expect(parseTagWeight('((1girl:1.2))')).toEqual({ tag: '1girl', weight: 1.2 });
+    });
+
+    test('should keep escaped parentheses as part of the tag name', () => {
+        expect(parseTagWeight('zako_\\(meme\\)')).toEqual({ tag: 'zako_\\(meme\\)', weight: 1.0 });
+        expect(parseTagWeight('(zako_\\(meme\\):1.1)')).toEqual({ tag: 'zako_\\(meme\\)', weight: 1.1 });
+    });
+
+    test('should not treat colons followed by non-weights as weight notation', () => {
+        expect(parseTagWeight('year:2000')).toEqual({ tag: 'year:2000', weight: 1.0 });
+        expect(parseTagWeight('foo:bar')).toEqual({ tag: 'foo:bar', weight: 1.0 });
+        expect(parseTagWeight('(year:2000:1.1)')).toEqual({ tag: 'year:2000', weight: 1.1 });
+    });
+
+    test('should trim surrounding whitespace', () => {
+        expect(parseTagWeight('  1girl:1.1  ')).toEqual({ tag: '1girl', weight: 1.1 });
+    });
+
+    test('should handle null and empty input', () => {
+        expect(parseTagWeight(null)).toEqual({ tag: null, weight: 1.0 });
+        expect(parseTagWeight('')).toEqual({ tag: '', weight: 1.0 });
+    });
+
+    test('should handle symbol-only tags', () => {
+        expect(parseTagWeight('; )')).toEqual({ tag: '; )', weight: 1.0 });
+        // Consistent with getCurrentTagRange: the inner ")" stays part of the tag
+        expect(parseTagWeight('(;):1.1')).toEqual({ tag: ';)', weight: 1.1 });
     });
 });

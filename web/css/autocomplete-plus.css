@@ -19,6 +19,7 @@
 }
 
 /* Dark Theme */
+
 /* Old frontend puts .dark-theme on <body>; new Vue frontend puts it on <html> (documentElement) */
 body.dark-theme,
 :root.dark-theme body {
@@ -315,6 +316,35 @@ body.dark-theme,
     background-color: var(--bg-color);
     color: var(--descrip-text);
     line-height: 1.25em;
+}
+
+/* Weight adjustment controls for the header tag */
+.related-tags-weight-controls {
+  display: inline-flex;
+  margin-left: 8px;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.related-tags-weight-btn {
+  padding: 0 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: none;
+  color: var(--input-text);
+  cursor: pointer;
+  font-size: 0.75em;
+  line-height: 1.4;
+  transition: background-color 0.2s;
+}
+
+.related-tags-weight-btn:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.related-tags-weight-btn:hover:not(:disabled) {
+  background-color: var(--border-color);
 }
 
 .related-tags-header-controls {

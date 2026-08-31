@@ -191,6 +191,72 @@ export function removePromptWeight(str) {
 }
 
 /**
+ * Strips non-escaped parentheses surrounding a string (iteratively, e.g. "((tag))" -> "tag").
+ * @param {string} str The input string
+ * @returns {string} The string without surrounding non-escaped parentheses
+ */
+function stripNonEscapedParentheses(str) {
+    let result = str;
+
+    let changed;
+    do {
+        changed = false;
+
+        const leadParenMatch = result.match(REG_STRIP_LEADING_PAREN);
+        if (leadParenMatch) {
+            result = leadParenMatch[1];
+            changed = true;
+        }
+
+        const trailParenMatch = result.match(REG_STRIP_TRAILING_PAREN);
+        if (trailParenMatch) {
+            result = trailParenMatch[1];
+            changed = true;
+        }
+
+        if (result.length === 0) break;
+    } while (changed);
+
+    return result;
+}
+
+/**
+ * Parses a raw tag segment (as it appears in a textarea) into its base tag and numeric weight.
+ * Strips non-escaped parentheses first and then the weight suffix (same order as getCurrentTagRange),
+ * e.g. "(1girl:1.1)" -> { tag: "1girl", weight: 1.1 }, "1girl" -> { tag: "1girl", weight: 1.0 }.
+ * @param {string} rawTag The raw tag segment, possibly including parentheses and a weight suffix.
+ * @returns {{ tag: string, weight: number }} The base tag and its weight (1.0 if no weight notation).
+ */
+export function parseTagWeight(rawTag) {
+    if (!rawTag) return { tag: rawTag, weight: 1.0 };
+
+    const trimmedTag = rawTag.trim();
+
+    // For symbol-only tags (no letters/numbers), return as-is (same as removePromptWeight)
+    if (!isContainsLetterOrNumber(trimmedTag)) {
+        return { tag: trimmedTag, weight: 1.0 };
+    }
+
+    // Strip non-escaped parentheses first (same order as getCurrentTagRange:
+    // the weight regex is anchored at the end of the string, so "(tag:1.1)" must
+    // have its parentheses removed before the weight can be matched)
+    const strippedTag = stripNonEscapedParentheses(trimmedTag);
+
+    // Extract the weight suffix if present (e.g., "standing:1.0" -> "standing")
+    const weightMatch = strippedTag.match(REG_PROMPT_WEIGHT);
+    if (weightMatch) {
+        const weightValue = weightMatch[2];
+        // Only treat it as a weight if it's a simple number between 0-9.9
+        // Don't treat larger numbers like :1999 or :2000 as weights
+        if (parseFloat(weightValue) <= MAX_PROMPT_WEIGHT_VALUE) {
+            return { tag: weightMatch[1], weight: parseFloat(weightValue) };
+        }
+    }
+
+    return { tag: strippedTag, weight: 1.0 };
+}
+
+/**
  * Checks if a string contains at least one letter or number.
  * This includes Latin letters, Japanese characters, Korean characters,
  * CJK Extension A, Cyrillic letters, and Hebrew letters.
