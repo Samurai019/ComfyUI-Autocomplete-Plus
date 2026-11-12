@@ -1,41 +1,75 @@
-/* Light Theme */
- body {
-  --autocomplete-plus-text-color-cat-blue: var(--p-blue-700);
-  --autocomplete-plus-text-color-cat-red: var(--p-red-600);
-  --autocomplete-plus-text-color-cat-purple: var(--p-purple-600);
-  --autocomplete-plus-text-color-cat-green: var(--p-green-700);
-  --autocomplete-plus-text-color-cat-yellow: var(--p-yellow-600);
-  --autocomplete-plus-text-color-cat-gray: var(--p-gray-600);
-  --autocomplete-plus-text-color-cat-sky: var(--p-sky-600);
-  --autocomplete-plus-text-color-cat-orange: var(--p-orange-600);
-  --autocomplete-plus-text-color-cat-white: var(--p-neutral-700);
-  --autocomplete-plus-text-color-disabled: var(--p-gray-400);
-  --autocomplete-plus-list-color-even: var(--p-neutral-300);
-  --autocomplete-plus-list-color-odd: var(--p-neutral-400);
-  --wiki-icon-text-color: var(--input-text);
+/* Theme tokens
+ *
+ * Old frontend (<= 1.4x): exposed the PrimeVue palette (`--p-blue-400`, ...)
+ * and toggled a `.dark-theme` class on <body> or <html>.
+ *
+ * Current frontend (Vue + Tailwind, e.g. 1.58.x): ships none of the `--p-*`
+ * tokens anymore and has no theme class at all - it only assigns
+ * `color-scheme` on <html> plus the semantic tokens (--background,
+ * --foreground, --input, --accent, ...). Resolving colors through `--p-*`
+ * therefore yields invalid values and every color silently falls back.
+ *
+ * So the palette below uses literal colors resolved by `light-dark()`, which
+ * follows the inherited `color-scheme` and tracks the frontend theme on its
+ * own. Browsers without `light-dark()` support keep the light values, and the
+ * legacy `.dark-theme` rules still cover the old frontend.
+ */
+
+/* Light Theme (also the fallback when light-dark() is unsupported) */
+body {
+  --autocomplete-plus-text-color-cat-blue: #1447e6;
+  --autocomplete-plus-text-color-cat-red: #e7000b;
+  --autocomplete-plus-text-color-cat-purple: #9810fa;
+  --autocomplete-plus-text-color-cat-green: #008138;
+  --autocomplete-plus-text-color-cat-yellow: #ca8a04;
+  --autocomplete-plus-text-color-cat-gray: #4a5565;
+  --autocomplete-plus-text-color-cat-sky: #0284c7;
+  --autocomplete-plus-text-color-cat-orange: #f05100;
+  --autocomplete-plus-text-color-cat-white: #404040;
+  --autocomplete-plus-text-color-disabled: #a1a1a1;
+  --autocomplete-plus-list-color-even: #d4d4d4;
+  --autocomplete-plus-list-color-odd: #a1a1a1;
+  --wiki-icon-text-color: var(--input-text, var(--foreground, #ddd));
   --wiki-icon-opacity-normal: 0.7;
   --wiki-icon-opacity-hover: 1.0;
   --wiki-icon-opacity-disabled: 0;
 }
 
-/* Dark Theme */
+/* Dark Theme, resolved from the document `color-scheme` set by the frontend */
+@supports (color: light-dark(#fff, #000)) {
+  body {
+    --autocomplete-plus-text-color-cat-blue: light-dark(#1447e6, #54a2ff);
+    --autocomplete-plus-text-color-cat-red: light-dark(#e7000b, #ff6568);
+    --autocomplete-plus-text-color-cat-purple: light-dark(#9810fa, #c27aff);
+    --autocomplete-plus-text-color-cat-green: light-dark(#008138, #05df72);
+    --autocomplete-plus-text-color-cat-yellow: light-dark(#ca8a04, #fac800);
+    --autocomplete-plus-text-color-cat-gray: light-dark(#4a5565, #99a1af);
+    --autocomplete-plus-text-color-cat-sky: light-dark(#0284c7, #7dd3fc);
+    --autocomplete-plus-text-color-cat-orange: light-dark(#f05100, #ff8904);
+    --autocomplete-plus-text-color-cat-white: light-dark(#404040, #e5e5e5);
+    --autocomplete-plus-text-color-disabled: light-dark(#a1a1a1, #6a7282);
+    --autocomplete-plus-list-color-even: light-dark(#d4d4d4, #262729);
+    --autocomplete-plus-list-color-odd: light-dark(#a1a1a1, #171718);
+  }
+}
 
-/* Old frontend puts .dark-theme on <body>; new Vue frontend puts it on <html> (documentElement) */
+/* Dark Theme for the legacy frontend, which still uses a theme class */
 body.dark-theme,
-:root.dark-theme body {
-  --autocomplete-plus-text-color-cat-blue: var(--p-blue-400);
-  --autocomplete-plus-text-color-cat-red: var(--p-red-400);
-  --autocomplete-plus-text-color-cat-purple: var(--p-purple-400);
-  --autocomplete-plus-text-color-cat-green: var(--p-green-400);
-  --autocomplete-plus-text-color-cat-yellow: var(--p-yellow-400);
-  --autocomplete-plus-text-color-cat-gray: var(--p-gray-400);
-  --autocomplete-plus-text-color-cat-sky: var(--p-sky-300);
-  --autocomplete-plus-text-color-cat-orange: var(--p-orange-400);
-  --autocomplete-plus-text-color-cat-white: var(--p-neutral-200);
-  --autocomplete-plus-text-color-disabled: var(--p-gray-500);
-  --autocomplete-plus-list-color-even: var(--p-neutral-800);
-  --autocomplete-plus-list-color-odd: var(--p-neutral-900);
-  --wiki-icon-text-color: var(--input-text);
+:root.dark-theme body,
+:root.dark body {
+  --autocomplete-plus-text-color-cat-blue: #54a2ff;
+  --autocomplete-plus-text-color-cat-red: #ff6568;
+  --autocomplete-plus-text-color-cat-purple: #c27aff;
+  --autocomplete-plus-text-color-cat-green: #05df72;
+  --autocomplete-plus-text-color-cat-yellow: #fac800;
+  --autocomplete-plus-text-color-cat-gray: #99a1af;
+  --autocomplete-plus-text-color-cat-sky: #7dd3fc;
+  --autocomplete-plus-text-color-cat-orange: #ff8904;
+  --autocomplete-plus-text-color-cat-white: #e5e5e5;
+  --autocomplete-plus-text-color-disabled: #6a7282;
+  --autocomplete-plus-list-color-even: #262729;
+  --autocomplete-plus-list-color-odd: #171718;
+  --wiki-icon-text-color: var(--input-text, var(--foreground, #ddd));
   --wiki-icon-opacity-normal: 0.5;
   --wiki-icon-opacity-hover: 0.9;
   --wiki-icon-opacity-disabled: 0;
@@ -48,8 +82,8 @@ body.dark-theme,
   left: 0;
   display: none;
   width: fit-content;
-  background-color: var(--comfy-input-bg);
-  color: var(--input-text);
+  background-color: var(--comfy-input-bg, var(--card, #222));
+  color: var(--input-text, var(--foreground, #ddd));
 }
 
 #autocomplete-plus-root .danbooru[data-tag-category="general"] {
@@ -147,7 +181,7 @@ body.dark-theme,
 }
 
 .autocomplete-plus-item:hover {
-  background-color: var(--comfy-hover-bg);
+  background-color: var(--accent, var(--comfy-hover-bg));
 }
 
 .autocomplete-plus-item .autocomplete-plus-tag-name {
@@ -205,8 +239,8 @@ body.dark-theme,
   left: 0;
   display: none;
   width: fit-content;
-  background-color: var(--comfy-input-bg);
-  color: var(--input-text);
+  background-color: var(--comfy-input-bg, var(--card, #222));
+  color: var(--input-text, var(--foreground, #ddd));
 }
 
 #related-tags-root .danbooru[data-tag-category="general"] {
@@ -399,7 +433,7 @@ body.dark-theme,
 }
 
 .related-tag-item:hover {
-  background-color: var(--p-form-field-filled-hover-background);
+  background-color: var(--accent, var(--p-form-field-filled-hover-background));
 }
 
 .related-tag-item.selected {
